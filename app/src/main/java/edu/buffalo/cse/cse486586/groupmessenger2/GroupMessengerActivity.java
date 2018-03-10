@@ -1,5 +1,6 @@
 package edu.buffalo.cse.cse486586.groupmessenger2;
 
+import java.net.SocketException;
 import java.util.*;
 import android.app.Activity;
 import android.content.Context;
@@ -54,9 +55,10 @@ public class GroupMessengerActivity extends Activity {
     static final int SERVER_PORT = 10000;
     static int count = 0;
 
-    static int proposed = 0;
-    static int agreed = 0;
+    static int proposed = -1;
+    static int agreed = -1;
     static int msgNo = 0;
+    static String failed = "";
 
     //static HashMap<String,Integer> proposedMap = new HashMap<String,Integer>();
     //static HashMap<String,HoldBack> holdBackMap = new  HashMap<String,HoldBack>();
@@ -65,20 +67,20 @@ public class GroupMessengerActivity extends Activity {
         @Override
         public int compare(HoldBack lhs, HoldBack rhs) {
 
-            if(lhs.getProposed()< rhs.getProposed())
+            if(lhs.getProposed()> rhs.getProposed())
             {
                 return 1;
             }
-            else if(lhs.getProposed()> rhs.getProposed())
+            else if(lhs.getProposed()< rhs.getProposed())
             {
                 return -1;
             }
             else
             {
-                if(Integer.parseInt(lhs.sender_port) < Integer.parseInt(rhs.sender_port))
+                if(Integer.parseInt(lhs.sender_port) > Integer.parseInt(rhs.sender_port))
                     return 1;
 
-                else if(Integer.parseInt(lhs.sender_port) > Integer.parseInt(rhs.sender_port))
+                else if(Integer.parseInt(lhs.sender_port) < Integer.parseInt(rhs.sender_port))
                     return -1;
                 else
                     return 0;
@@ -158,7 +160,7 @@ public class GroupMessengerActivity extends Activity {
                 Log.d("OnClick", "MessageId  " + final_msgId);
 
                 Log.d("OnClick", "Calling Initial Client Task");
-                new ClientTask(msg, final_msgId, proposed,myPort).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Initial");
+                new ClientTask(msg, final_msgId, proposed,myPort,"").executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Initial");
             }
         });
     }
@@ -203,9 +205,6 @@ public class GroupMessengerActivity extends Activity {
 
                     if (line != null)
                 {
-
-
-
                     String lines[] = line.split("###");
 
                     Log.d("ServerTask", "Lines length " + lines.length);
@@ -219,8 +218,8 @@ public class GroupMessengerActivity extends Activity {
                     int rec_proposed = Integer.parseInt(lines[2]);
                     String sender_port = lines[3];
                     String rec_port = lines[4];
-                    boolean allowed_delivery = Boolean.parseBoolean(lines[5]);
-                    String isreply = lines[6];
+                    String isreply = lines[5];
+                    failed = lines[6];
 
                     if (isreply.equals("P1")) {
                         Log.d("ServerTask", "isreply " + isreply);
@@ -235,143 +234,142 @@ public class GroupMessengerActivity extends Activity {
 
                             proposed = rec_proposed;
 
-                            HoldBack hb = new HoldBack(message, msgId, proposed, sender_port, allowed_delivery);
+                            HoldBack hb = new HoldBack(message, msgId, proposed, sender_port, false);
                             holdBackQueue.add(hb);
 
-                            Socket client_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                    Integer.parseInt(sender_port));
-
-                            client_socket.setTcpNoDelay(true);
-
-                            //  Log.d(TAG, "Client: " + msgToSend);
-
-                            // PrintWriter will send the message to the IP binded to the socket
                             PrintWriter out =
-                                    new PrintWriter(client_socket.getOutputStream(), true);
-
-                            // Log.d(TAG, "Client: PrintWriter Created");
-                            out.println(message + "###" + msgId + "###" + rec_proposed + "###" + rec_port + "###" + sender_port + "###false###P2");
-
-                            //out.flush();
-                            out.close();
-                            client_socket.close();
-                            // Log.d(TAG, "Client: Sent to server");
+                                    new PrintWriter(socket.getOutputStream(), true);
+                            out.println(message + "###" + msgId + "###" + proposed + "###" + rec_port + "###" + sender_port + "###P2###" + failed);
+                            out.flush();
 
                         } else {
                             Log.d("ServerTask", "This me me");
-                            HoldBack hb = new HoldBack(message, msgId, rec_proposed, sender_port, allowed_delivery);
-                            holdBackQueue.add(hb);
+
+                            PrintWriter out =
+                                    new PrintWriter(socket.getOutputStream(), true);
+                            out.println(message + "###" + msgId + "###" + rec_proposed + "###" + rec_port + "###" + sender_port + "###P2###" + failed);
+                            out.flush();
                         }
-                    } else if (isreply.equals("P2")) {
-                        Log.d("ServerTask", "isReply " + isreply);
-                        Iterator<HoldBack> it = holdBackQueue.iterator();
+                    }
 
-                        while (it.hasNext()) {
-                            HoldBack hb_temp = it.next();
-                            if (hb_temp.getMsgId().equals(msgId)) {
-                                if (hb_temp.getProposed() < rec_proposed) {
-                                    holdBackQueue.remove(hb_temp);
-                                    hb_temp.setProposed(rec_proposed);
-                                    holdBackQueue.add(hb_temp);
-                                } else
-                                    rec_proposed = hb_temp.getProposed();
-                                break;
-                            }
-                        }
-
-
-                        proposedMapCount.put(msgId, proposedMapCount.get(msgId) + 1);
-                        // TODO PRATIBHA - Yet to handle failure case. Assuming all 5 will be up.
-
-                        if (proposedMapCount.get(msgId) == 5) {
-                            Log.d("ServerTask", "count is 5");
-                            new ClientTask(message, msgId, rec_proposed, rec_port).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Reply");
-                        }
-                    } else if (isreply.equals("Agree")) {
+                    else if (isreply.equals("Agree")) {
                         Log.d("ServerTask", "isreply " + isreply);
-                        agreed = rec_proposed;
-                        Iterator<HoldBack> it = holdBackQueue.iterator();
 
-                        while (it.hasNext()) {
-                            HoldBack hb_temp = it.next();
-                            if (hb_temp.getMsgId().equals(msgId)) {
-                                holdBackQueue.remove(hb_temp);
-                                hb_temp.setProposed(rec_proposed);
-                                hb_temp.setDeliver(true);
-                                holdBackQueue.add(hb_temp);
-                                break;
+
+                        if (!sender_port.equals(rec_port)) {
+                            Log.d("ServerTask", "Not me ");
+
+
+                            agreed = Math.max(rec_proposed,agreed);
+
+                            Log.d("ServerTask", "Changed Agreed " + agreed);
+
+                            Iterator<HoldBack> it = holdBackQueue.iterator();
+
+                            while (it.hasNext()) {
+                                HoldBack hb_temp = it.next();
+                                if (hb_temp.getMsgId().equals(msgId)) {
+
+                                    Log.d("ServerTask", "Found the message ");
+
+                                    if(hb_temp.getProposed()<=rec_proposed)
+                                    {
+                                        holdBackQueue.remove(hb_temp);
+                                        hb_temp.setProposed(rec_proposed);
+                                        hb_temp.setDeliver(true);
+                                        holdBackQueue.add(hb_temp);
+                                        Log.d("ServerTask", "Changed priority and delivery to true ");
+                                    }
+                                    break;
+                                }
                             }
                         }
+
+                        Log.d("ServerTask", "Final Delivery");
+
+                        PrintWriter out =
+                                new PrintWriter(socket.getOutputStream(), true);
+                        out.println("Final Delivery");
+                        out.flush();
                     }
                 }
-                    while (holdBackQueue.peek() != null) {
+                    Boolean isbreak = false;
+
+                    while (holdBackQueue.peek() != null && !isbreak) {
                         Log.d("ServerTask", "Checking the queue");
 
-                        if (holdBackQueue.peek().isDeliver() == true) {
+                        if (holdBackQueue.peek().isDeliver() == true && !holdBackQueue.peek().getSender_port().equals(failed)) {
+
+                            Log.d("ServerTask", "There is something to poll");
+
                             HoldBack hb_temp = holdBackQueue.poll();
+
+                            Log.d("ServerTask", "polled the same");
+
                             if (hb_temp.msg != null) {
+
+                                Log.d("ServerTask", "Polled message not null");
+
                                 mUri = buildUri("content", "edu.buffalo.cse.cse486586.groupmessenger2.provider");
                                 mContentValues = new ContentValues();
-                                mContentValues.put("key", count);
+                                mContentValues.put("key", String.valueOf(count));
                                 count++;
-                                mContentValues.put("value", line);
+                                mContentValues.put("value", hb_temp.msg);
                                 getContentResolver().insert(mUri, mContentValues);
+                                Log.d("ServerTask", "Inserted the value");
+
+                                Log.d("ServerTask", "Call publish progress for message : " + hb_temp.msgId);
+
+                                onProgressUpdate(new String[]{hb_temp.msg});
                             }
-                        } else
-                            break;
+                        }
+
+                        else if(holdBackQueue.peek().getSender_port().equals(failed))
+                        {
+                            holdBackQueue.poll();
+                        }
+                        else
+                        {
+                            isbreak = true;
+                        }
                     }
 
-                /*
-
-                    if (line != null) {
-                        //   Log.d(TAG, "doInBackground: Line is not null");
-                        mUri = buildUri("content", "edu.buffalo.cse.cse486586.groupmessenger2.provider");
-                        mContentValues = new ContentValues();
-                        mContentValues.put("key", Integer.toString(count));
-                        count++;
-                        mContentValues.put("value", line);
-                        getContentResolver().insert(mUri, mContentValues);
-
-                        //  Log.d(TAG, "doInBackground: Stored in DB");
-                    }*/
                     // in.close();
 
-                    if(socket!=null && !socket.isClosed())
-                    {
-                        socket.close();
-                    }
+                    //if(socket!=null && !socket.isClosed())
+                    //{
+                    //    socket.close();
+                    //}
 
                 }
             } catch (SocketTimeoutException e) {
-                Log.e("Server Task", "Time Out Exception Catch in the code");
+                Log.e("Server Task", "Alert Time Out Exception Catch in the code");
             } catch (IOException e) {
-                Log.e("Server Task", "IOException Catch in the code");
+                Log.e("Server Task", "Alert IOException Catch in the code");
             }
-
-            /*
-             * TODO: Fill in your server code that receives messages and passes them
-             * to onProgressUpdate().
-             */
+            catch (Exception e) {
+                Log.e("Server Task", "Alert Exception Catch in the code");
+            }
             return null;
         }
     }
 
     private class ClientTask extends AsyncTask<String, Void, Void> {
 
-        String msg,myPort,msgId;
+        String msg,myPort,msgId,remotePort;
         int final_proposed;
 
-        ClientTask(String msg,String msgId,int final_proposed,String myPort)
+        ClientTask(String msg,String msgId,int final_proposed,String myPort, String remotePort)
         {
             this.msg = msg;
             this.msgId = msgId;
             this.final_proposed = final_proposed;
             this.myPort = myPort;
+            this.remotePort = remotePort;
         }
 
         @Override
         protected Void doInBackground(String... msgs) {
-            try {
 
                 Log.d("ClientTask", "Starting the code");
 
@@ -380,90 +378,171 @@ public class GroupMessengerActivity extends Activity {
 
                 if(msgType.equals("Initial"))
                 {
+                    HoldBack hb = new HoldBack(msg, msgId, final_proposed, myPort, false);
+                    holdBackQueue.add(hb);
+
                     Log.d("ClientTask", "Inside Initial");
                     Socket socket[] = new Socket[REMOTE_PORTS.length];
-                    proposedMapCount.put(msgId,1);
 
-                    for(int i=0;i<REMOTE_PORTS.length;i++)
-                    {
-                        Log.d("ClientTask", "Send proposal to all");
-                        String remotePort = REMOTE_PORTS[i];
+                    for(int i=0;i<REMOTE_PORTS.length;i++) {
 
-                        socket[i] = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                Integer.parseInt(remotePort));
-                        socket[i].setTcpNoDelay(true);
+                        try
+                        {
+                            if(failed.equals(REMOTE_PORTS[i]))
+                            {
+                                Log.d("ClientTask", "Failed AVD : " + REMOTE_PORTS[i]);
+                                continue;
+                            }
 
-                        //  Log.d(TAG, "Client: " + msgToSend);
+                            String remotePort = REMOTE_PORTS[i];
 
-                        // PrintWriter will send the message to the IP binded to the socket
-                        PrintWriter out =
-                                new PrintWriter(socket[i].getOutputStream(), true);
+                            Log.d("ClientTask", "Send proposal for " + msgId + " to " + remotePort);
 
-                        Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###false###P1");
+                            socket[i] = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                    Integer.parseInt(remotePort));
+                            //socket[i].setTcpNoDelay(true);
+                            socket[i].setSoTimeout(500);
 
-                        // Log.d(TAG, "Client: PrintWriter Created");
-                        out.println(msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###false###P1");
-                        //out.flush();
+                            //  Log.d(TAG, "Client: " + msgToSend);
 
-                        out.close();
-                        socket[i].close();
+                            // PrintWriter will send the message to the IP binded to the socket
+                            PrintWriter out =
+                                    new PrintWriter(socket[i].getOutputStream(), true);
 
-                        /*try {
-                            Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
+                            Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###P1###" + failed);
+
+                            // Log.d(TAG, "Client: PrintWriter Created");
+                            out.println(msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###P1###" + failed);
+                            out.flush();
+
+                            BufferedReader in = new BufferedReader(
+                                    new InputStreamReader(socket[i].getInputStream()));
+
+                            String line = in.readLine();
+
+                            if (line != null) {
+
+                                Log.d("Client Task", "Line read " + line);
+                                String lines[] = line.split("###");
+
+                                Log.d("Client Task", "Lines length " + lines.length);
+
+                                String message = lines[0];
+                                String msgId = lines[1];
+                                int rec_proposed = Integer.parseInt(lines[2]);
+                                String sender_port = lines[3];
+                                String rec_port = lines[4];
+                                String isreply = lines[5];
+                                failed = lines[6];
+
+                                Log.d("Client task", "isReply " + isreply);
+
+                                if(final_proposed<rec_proposed)
+                                    final_proposed = rec_proposed;
+                            }
+                            else
+                            {
+                                Log.d("Client task", "P2 Message found null. Set AVD as failed");
+                                failed = REMOTE_PORTS[i];
+                            }
+
+                            out.close();
+                            socket[i].close();
+                        }
+                        catch (UnknownHostException e) {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask UnknownHostException");
+                        } catch (SocketTimeoutException e) {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask socket time out");
+                        } catch (IOException e) {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask socket IOException");
+                        }
+                       /* catch(InterruptedException e)
+                        {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask Interrupt");
                         }*/
-
-                        // Log.d(TAG, "Client: Sent to server");
-                /*
-                 * TODO: Fill in your client code that sends out a message.
-                 */
                     }
-                }
-                else if(msgType.equals("Reply"))
-                {
-                    Log.d("ClientTask", "Inside Reply");
+
+                    Iterator<HoldBack> it = holdBackQueue.iterator();
+
+                    while (it.hasNext()) {
+                        HoldBack hb_temp = it.next();
+                        if (hb_temp.getMsgId().equals(msgId)) {
+
+                            holdBackQueue.remove(hb_temp);
+                            hb_temp.setProposed(final_proposed);
+                            hb_temp.setDeliver(true);
+                            holdBackQueue.add(hb_temp);
+                            break;
+                        }
+                    }
+
+                    Log.d("Client Task", "Agreed Priority for " + msgId + " is " + final_proposed);
                     agreed = final_proposed;
-                    Socket socket[] = new Socket[REMOTE_PORTS.length];
+                    Socket socket1[] = new Socket[REMOTE_PORTS.length];
 
-                    for(int i=0;i<REMOTE_PORTS.length;i++)
-                    {
-                        Log.d("ClientTask", "Sending agreement to all");
-                        String remotePort = REMOTE_PORTS[i];
+                    for(int i=0;i<REMOTE_PORTS.length;i++) {
 
-                        socket[i] = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                Integer.parseInt(remotePort));
-                        socket[i].setTcpNoDelay(true);
+                        try
+                        {
+                            if(failed.equals(REMOTE_PORTS[i]))
+                            {
+                                Log.d("Client Task", "This is failed AVD " + REMOTE_PORTS[i]);
+                                continue;
+                            }
 
-                        //  Log.d(TAG, "Client: " + msgToSend);
+                            String remotePort = REMOTE_PORTS[i];
+                            Log.d("ClientTask", "Sending agreement for " + msgId + " to : " + REMOTE_PORTS[i]);
 
-                        // PrintWriter will send the message to the IP binded to the socket
-                        PrintWriter out =
-                                new PrintWriter(socket[i].getOutputStream(), true);
 
-                        Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###true###Agree");
+                            socket1[i] = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                    Integer.parseInt(remotePort));
+                            //socket1[i].setTcpNoDelay(true);
+                            socket1[i].setSoTimeout(500);
 
-                        // Log.d(TAG, "Client: PrintWriter Created");
-                        out.println(msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###true###Agree");
+                            PrintWriter out =
+                                    new PrintWriter(socket1[i].getOutputStream(), true);
 
-                        out.close();
-                        socket[i].close();
-                        //out.flush();
-                        // Log.d(TAG, "Client: Sent to server");
-                /*
-                 * TODO: Fill in your client code that sends out a message.
-                 */
+                            Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###Agree###" + failed);
+
+                            // Log.d(TAG, "Client: PrintWriter Created");
+                            out.println(msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###Agree###" + failed);
+                            out.flush();
+
+                            BufferedReader in = new BufferedReader(
+                                    new InputStreamReader(socket1[i].getInputStream()));
+
+                            String line = in.readLine();
+
+                            if(line!=null)
+                            {
+                                Log.d(TAG,"Got empty reply back from server");
+                            }
+
+                            out.close();
+                            socket1[i].close();
+
+                            // Log.d(TAG, "Client: Sent to server");
+                        }
+                        catch (UnknownHostException e) {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask UnknownHostException");
+                        } catch (SocketTimeoutException e) {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask socket time out");
+                        } catch (IOException e) {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask socket IOException");
+                        } /*catch(InterruptedException e)
+                        {
+                            failed = REMOTE_PORTS[i];
+                            Log.e(TAG, "Pratibha Alert ClientTask Interrupt");
+                        }*/
                     }
                 }
-
-            } catch (UnknownHostException e) {
-                Log.e(TAG, "ClientTask UnknownHostException");
-            } catch (SocketTimeoutException e) {
-                Log.e(TAG, "ClientTask socket IOException");
-            } catch (IOException e) {
-                Log.e(TAG, "ClientTask socket IOException");
-            }
-
             return null;
         }
     }
