@@ -40,13 +40,18 @@ import java.util.PriorityQueue;
  *
  */
 
-/*
-Android developer,
-slidesshare,
-ISIS indranil gupta
-https://javabeat.net/ordering-queue-using-comparator-interface-and-priorityqueue/   - for priority queue comparator
-https://www.tutorialspoint.com/java/util/priorityqueue_iterator.htm                 - for iterating through the priority queue
+/* References :
+Content Provider Concepts:
+1. https://developer.android.com/guide/topics/providers/content-provider-creating.html
+
+Multicast Ordering and Failure Handling Concepts:
+1. https://www.youtube.com/watch?v=qhL7GW1KOj8&list=PLFd87qVsaLhOkTLvfp6MC94iFa_1c9wrU&index=51
+2. https://www.youtube.com/watch?v=yHRYetSvyjU&list=PLFd87qVsaLhOkTLvfp6MC94iFa_1c9wrU&index=52
+3. https://www.youtube.com/watch?v=lugR1CIIU4w&index=53&list=PLFd87qVsaLhOkTLvfp6MC94iFa_1c9wrU
+4. https://www.youtube.com/watch?v=J076S7E33bo&index=55&list=PLFd87qVsaLhOkTLvfp6MC94iFa_1c9wrU
+
  */
+
 
 public class GroupMessengerActivity extends Activity {
 
@@ -58,12 +63,14 @@ public class GroupMessengerActivity extends Activity {
     static int proposed = -1;
     static int agreed = -1;
     static int msgNo = 0;
-    static String failed = "";
+    static String failed = "NA";
 
-    //static HashMap<String,Integer> proposedMap = new HashMap<String,Integer>();
-    //static HashMap<String,HoldBack> holdBackMap = new  HashMap<String,HoldBack>();
 
-    PriorityQueue<HoldBack> holdBackQueue = new PriorityQueue<HoldBack>(100, new Comparator<HoldBack>() {
+    /*
+    Referred for How to use priority queue comparator
+    1. https://javabeat.net/ordering-queue-using-comparator-interface-and-priorityqueue/
+     */
+    PriorityQueue<HoldBack> holdBackQueue = new PriorityQueue<HoldBack>(30, new Comparator<HoldBack>() {
         @Override
         public int compare(HoldBack lhs, HoldBack rhs) {
 
@@ -87,7 +94,6 @@ public class GroupMessengerActivity extends Activity {
             }
         }
     });
-    static HashMap<String,Integer> proposedMapCount = new  HashMap<String,Integer>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,24 +148,30 @@ public class GroupMessengerActivity extends Activity {
             @Override
             public void onClick(View v) {
 
-                Log.d("OnClick", "Execution Started");
+              //  Log.d("OnClick", "Execution Started");
 
                 String msg = editText.getText().toString();
-                Log.d("OnClick", "Message  " + msg);
+             //   Log.d("OnClick", "Message  " + msg);
 
                 editText.setText(""); // This is one way to reset the input box
 
+                TextView localTextView = (TextView) findViewById(R.id.textView1);
+                localTextView.append("\t" + msg); // This is one way to display a string.
+
+                // Get the highest new proposed value
                 proposed = Math.max(agreed,proposed) + 1;
 
-                Log.d("OnClick", "proposed  " + proposed);
+                //Log.d("OnClick", "proposed  " + proposed);
 
                 msgNo++;
 
+                // Msgid so as to uniquely identify a single message in the system
                 final String final_msgId = myPort + "@" + msgNo;
 
-                Log.d("OnClick", "MessageId  " + final_msgId);
+               // Log.d("OnClick", "MessageId  " + final_msgId);
 
-                Log.d("OnClick", "Calling Initial Client Task");
+              //  Log.d("OnClick", "Calling Initial Client Task");
+                // Set message type to initial
                 new ClientTask(msg, final_msgId, proposed,myPort,"").executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Initial");
             }
         });
@@ -174,7 +186,7 @@ public class GroupMessengerActivity extends Activity {
         @Override
         protected Void doInBackground(ServerSocket... sockets) {
 
-            Log.d("ServerTask", "Starting the code");
+           // Log.d("ServerTask", "Starting the code");
 
             //  Log.d(TAG, "doInBackground: Socket accept done");
             //  dataInputStream = new DataInputStream(socket.getInputStream());
@@ -185,7 +197,7 @@ public class GroupMessengerActivity extends Activity {
             try {
                 while(true) {
 
-                    Log.d("ServerTask", "Inside while true");
+                  //  Log.d("ServerTask", "Inside while true");
 
                     //  Log.d(TAG, "doInBackground: In try");
                     // Server will accept the connection from the client
@@ -201,13 +213,13 @@ public class GroupMessengerActivity extends Activity {
                     // Read the message line by line
                     String line = in.readLine();
 
-                    Log.d("ServerTask", "Line read " + line);
+                   // Log.d("ServerTask", "Line read " + line);
 
                     if (line != null)
                 {
                     String lines[] = line.split("###");
 
-                    Log.d("ServerTask", "Lines length " + lines.length);
+                   // Log.d("ServerTask", "Lines length " + lines.length);
 
 
                     //  Log.d(TAG, "doInBackground: Read the line");
@@ -221,12 +233,14 @@ public class GroupMessengerActivity extends Activity {
                     String isreply = lines[5];
                     failed = lines[6];
 
+                    // P1 means first proposal message from the client
                     if (isreply.equals("P1")) {
-                        Log.d("ServerTask", "isreply " + isreply);
+                       // Log.d("ServerTask", "isreply " + isreply);
 
                         if (!sender_port.equals(rec_port)) {
-                            Log.d("ServerTask", "This is not sender");
+                           // Log.d("ServerTask", "This is not sender");
 
+                            // Calculate your own latest new proposal
                             int new_proposed = Math.max(agreed, proposed) + 1;
 
                             if (new_proposed > rec_proposed)
@@ -234,17 +248,21 @@ public class GroupMessengerActivity extends Activity {
 
                             proposed = rec_proposed;
 
+                            // Keep the message and its details in the HoldBack Queue
                             HoldBack hb = new HoldBack(message, msgId, proposed, sender_port, false);
                             holdBackQueue.add(hb);
 
+                            // Send reply to the client about the new proposal
                             PrintWriter out =
                                     new PrintWriter(socket.getOutputStream(), true);
                             out.println(message + "###" + msgId + "###" + proposed + "###" + rec_port + "###" + sender_port + "###P2###" + failed);
                             out.flush();
 
                         } else {
-                            Log.d("ServerTask", "This me me");
+                           // Log.d("ServerTask", "This me me");
 
+                            // This runs when it is my own message
+                            // Just send back the same proposal
                             PrintWriter out =
                                     new PrintWriter(socket.getOutputStream(), true);
                             out.println(message + "###" + msgId + "###" + rec_proposed + "###" + rec_port + "###" + sender_port + "###P2###" + failed);
@@ -252,25 +270,33 @@ public class GroupMessengerActivity extends Activity {
                         }
                     }
 
+                    // Agree means final agreed number for a message from the client
                     else if (isreply.equals("Agree")) {
-                        Log.d("ServerTask", "isreply " + isreply);
+                        //Log.d("ServerTask", "isreply " + isreply);
 
 
                         if (!sender_port.equals(rec_port)) {
-                            Log.d("ServerTask", "Not me ");
+                            //Log.d("ServerTask", "Not me ");
 
-
+                            // Update your agreed variable
                             agreed = Math.max(rec_proposed,agreed);
 
-                            Log.d("ServerTask", "Changed Agreed " + agreed);
+                           // Log.d("ServerTask", "Changed Agreed " + agreed);
+
+                            /*
+                            Referred for Iterating through priority queue
+                            https://www.tutorialspoint.com/java/util/priorityqueue_iterator.htm
+                            */
 
                             Iterator<HoldBack> it = holdBackQueue.iterator();
 
+                            // Iterate through the holdback queue and change the priority of the message
+                            // Also set the delivery true
                             while (it.hasNext()) {
                                 HoldBack hb_temp = it.next();
                                 if (hb_temp.getMsgId().equals(msgId)) {
 
-                                    Log.d("ServerTask", "Found the message ");
+                                   // Log.d("ServerTask", "Found the message ");
 
                                     if(hb_temp.getProposed()<=rec_proposed)
                                     {
@@ -278,37 +304,45 @@ public class GroupMessengerActivity extends Activity {
                                         hb_temp.setProposed(rec_proposed);
                                         hb_temp.setDeliver(true);
                                         holdBackQueue.add(hb_temp);
-                                        Log.d("ServerTask", "Changed priority and delivery to true ");
+                                       // Log.d("ServerTask", "Changed priority and delivery to true ");
                                     }
                                     break;
                                 }
                             }
                         }
 
-                        Log.d("ServerTask", "Final Delivery");
+                       // Log.d("ServerTask", "Final Delivery");
 
+                        // Send back reply to the client to confirm the updation
                         PrintWriter out =
                                 new PrintWriter(socket.getOutputStream(), true);
                         out.println("Final Delivery");
                         out.flush();
                     }
                 }
-                    Boolean isbreak = false;
 
-                    while (holdBackQueue.peek() != null && !isbreak) {
-                        Log.d("ServerTask", "Checking the queue");
+                // Check the holdback queue periodically and deliver the messages
+                    while (holdBackQueue.peek()!=null) {
+                     //   Log.d("ServerTask", "Checking the queue");
 
-                        if (holdBackQueue.peek().isDeliver() == true && !holdBackQueue.peek().getSender_port().equals(failed)) {
+                        // If message sender is failed, just remove the message from the queue
+                        if(holdBackQueue.peek().getSender_port().equals(failed))
+                        {
+                            holdBackQueue.poll();
+                            continue;
+                        }
 
-                            Log.d("ServerTask", "There is something to poll");
+                        if (holdBackQueue.peek().isDeliver() == true) {
+
+                           // Log.d("ServerTask", "There is something to poll");
 
                             HoldBack hb_temp = holdBackQueue.poll();
 
-                            Log.d("ServerTask", "polled the same");
+                          //  Log.d("ServerTask", "polled the same");
 
                             if (hb_temp.msg != null) {
 
-                                Log.d("ServerTask", "Polled message not null");
+                               // Log.d("ServerTask", "Polled message not null");
 
                                 mUri = buildUri("content", "edu.buffalo.cse.cse486586.groupmessenger2.provider");
                                 mContentValues = new ContentValues();
@@ -316,31 +350,15 @@ public class GroupMessengerActivity extends Activity {
                                 count++;
                                 mContentValues.put("value", hb_temp.msg);
                                 getContentResolver().insert(mUri, mContentValues);
-                                Log.d("ServerTask", "Inserted the value");
+                               // Log.d("ServerTask", "Inserted the value");
 
-                                Log.d("ServerTask", "Call publish progress for message : " + hb_temp.msgId);
-
-                                onProgressUpdate(new String[]{hb_temp.msg});
+                               // Log.d("ServerTask", "Call publish progress for message : " + hb_temp.msgId);
+                                publishProgress(new String[]{hb_temp.msg});
                             }
                         }
-
-                        else if(holdBackQueue.peek().getSender_port().equals(failed))
-                        {
-                            holdBackQueue.poll();
-                        }
                         else
-                        {
-                            isbreak = true;
-                        }
+                            break;
                     }
-
-                    // in.close();
-
-                    //if(socket!=null && !socket.isClosed())
-                    //{
-                    //    socket.close();
-                    //}
-
                 }
             } catch (SocketTimeoutException e) {
                 Log.e("Server Task", "Alert Time Out Exception Catch in the code");
@@ -371,36 +389,39 @@ public class GroupMessengerActivity extends Activity {
         @Override
         protected Void doInBackground(String... msgs) {
 
-                Log.d("ClientTask", "Starting the code");
+               // Log.d("ClientTask", "Starting the code");
 
                 String msgType = msgs[0];
-                Log.d("ClientTask", "Message Type " + msgType);
+               // Log.d("ClientTask", "Message Type " + msgType);
 
+            // Initial message after clicking on the send button
                 if(msgType.equals("Initial"))
                 {
+                    // Keep the message in the holdback queue
                     HoldBack hb = new HoldBack(msg, msgId, final_proposed, myPort, false);
                     holdBackQueue.add(hb);
 
-                    Log.d("ClientTask", "Inside Initial");
+                   // Log.d("ClientTask", "Inside Initial");
                     Socket socket[] = new Socket[REMOTE_PORTS.length];
 
+                    // Send the proposed value to all the ports
                     for(int i=0;i<REMOTE_PORTS.length;i++) {
 
                         try
                         {
+                            // Ignore the failed AVDs
                             if(failed.equals(REMOTE_PORTS[i]))
                             {
-                                Log.d("ClientTask", "Failed AVD : " + REMOTE_PORTS[i]);
+                               // Log.d("ClientTask", "Failed AVD : " + REMOTE_PORTS[i]);
                                 continue;
                             }
 
                             String remotePort = REMOTE_PORTS[i];
 
-                            Log.d("ClientTask", "Send proposal for " + msgId + " to " + remotePort);
+                           // Log.d("ClientTask", "Send proposal for " + msgId + " to " + remotePort);
 
                             socket[i] = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                                     Integer.parseInt(remotePort));
-                            //socket[i].setTcpNoDelay(true);
                             socket[i].setSoTimeout(500);
 
                             //  Log.d(TAG, "Client: " + msgToSend);
@@ -409,12 +430,13 @@ public class GroupMessengerActivity extends Activity {
                             PrintWriter out =
                                     new PrintWriter(socket[i].getOutputStream(), true);
 
-                            Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###P1###" + failed);
+                           // Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###P1###" + failed);
 
                             // Log.d(TAG, "Client: PrintWriter Created");
                             out.println(msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###P1###" + failed);
                             out.flush();
 
+                            // get back the proposal from each of the process
                             BufferedReader in = new BufferedReader(
                                     new InputStreamReader(socket[i].getInputStream()));
 
@@ -422,10 +444,10 @@ public class GroupMessengerActivity extends Activity {
 
                             if (line != null) {
 
-                                Log.d("Client Task", "Line read " + line);
+                                //Log.d("Client Task", "Line read " + line);
                                 String lines[] = line.split("###");
 
-                                Log.d("Client Task", "Lines length " + lines.length);
+                               // Log.d("Client Task", "Lines length " + lines.length);
 
                                 String message = lines[0];
                                 String msgId = lines[1];
@@ -435,37 +457,34 @@ public class GroupMessengerActivity extends Activity {
                                 String isreply = lines[5];
                                 failed = lines[6];
 
-                                Log.d("Client task", "isReply " + isreply);
+                               // Log.d("Client task", "isReply " + isreply);
 
+                                // Update the proposal as per the reply from the processes
                                 if(final_proposed<rec_proposed)
                                     final_proposed = rec_proposed;
-                            }
-                            else
-                            {
-                                Log.d("Client task", "P2 Message found null. Set AVD as failed");
-                                failed = REMOTE_PORTS[i];
                             }
 
                             out.close();
                             socket[i].close();
                         }
                         catch (UnknownHostException e) {
-                            failed = REMOTE_PORTS[i];
+                            if(!REMOTE_PORTS[i].equals(myPort))
+                                failed = REMOTE_PORTS[i];
+
                             Log.e(TAG, "Pratibha Alert ClientTask UnknownHostException");
                         } catch (SocketTimeoutException e) {
-                            failed = REMOTE_PORTS[i];
+                            if(!REMOTE_PORTS[i].equals(myPort))
+                                failed = REMOTE_PORTS[i];
                             Log.e(TAG, "Pratibha Alert ClientTask socket time out");
                         } catch (IOException e) {
-                            failed = REMOTE_PORTS[i];
+                            if(!REMOTE_PORTS[i].equals(myPort))
+                                failed = REMOTE_PORTS[i];
                             Log.e(TAG, "Pratibha Alert ClientTask socket IOException");
                         }
-                       /* catch(InterruptedException e)
-                        {
-                            failed = REMOTE_PORTS[i];
-                            Log.e(TAG, "Pratibha Alert ClientTask Interrupt");
-                        }*/
+
                     }
 
+                    // Update the message in the HoldBack queue and set delivery to true
                     Iterator<HoldBack> it = holdBackQueue.iterator();
 
                     while (it.hasNext()) {
@@ -480,33 +499,34 @@ public class GroupMessengerActivity extends Activity {
                         }
                     }
 
-                    Log.d("Client Task", "Agreed Priority for " + msgId + " is " + final_proposed);
+                    //Log.d("Client Task", "Agreed Priority for " + msgId + " is " + final_proposed);
+                    // Update the latest agreed message
                     agreed = final_proposed;
                     Socket socket1[] = new Socket[REMOTE_PORTS.length];
 
+                    // Send back the latest updated agreed value for this message to all the processes
                     for(int i=0;i<REMOTE_PORTS.length;i++) {
 
                         try
                         {
                             if(failed.equals(REMOTE_PORTS[i]))
                             {
-                                Log.d("Client Task", "This is failed AVD " + REMOTE_PORTS[i]);
+                               // Log.d("Client Task", "This is failed AVD " + REMOTE_PORTS[i]);
                                 continue;
                             }
 
                             String remotePort = REMOTE_PORTS[i];
-                            Log.d("ClientTask", "Sending agreement for " + msgId + " to : " + REMOTE_PORTS[i]);
+                           // Log.d("ClientTask", "Sending agreement for " + msgId + " to : " + REMOTE_PORTS[i]);
 
 
                             socket1[i] = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                                     Integer.parseInt(remotePort));
-                            //socket1[i].setTcpNoDelay(true);
                             socket1[i].setSoTimeout(500);
 
                             PrintWriter out =
                                     new PrintWriter(socket1[i].getOutputStream(), true);
 
-                            Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###Agree###" + failed);
+                           // Log.d(TAG, msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###Agree###" + failed);
 
                             // Log.d(TAG, "Client: PrintWriter Created");
                             out.println(msg + "###" + msgId + "###" + final_proposed + "###" + myPort + "###" + remotePort + "###Agree###" + failed);
@@ -516,25 +536,21 @@ public class GroupMessengerActivity extends Activity {
                                     new InputStreamReader(socket1[i].getInputStream()));
 
                             String line = in.readLine();
-
-                            if(line!=null)
-                            {
-                                Log.d(TAG,"Got empty reply back from server");
-                            }
-
                             out.close();
                             socket1[i].close();
 
-                            // Log.d(TAG, "Client: Sent to server");
                         }
                         catch (UnknownHostException e) {
-                            failed = REMOTE_PORTS[i];
+                            if(!REMOTE_PORTS[i].equals(myPort))
+                                failed = REMOTE_PORTS[i];
                             Log.e(TAG, "Pratibha Alert ClientTask UnknownHostException");
                         } catch (SocketTimeoutException e) {
-                            failed = REMOTE_PORTS[i];
+                            if(!REMOTE_PORTS[i].equals(myPort))
+                                failed = REMOTE_PORTS[i];
                             Log.e(TAG, "Pratibha Alert ClientTask socket time out");
                         } catch (IOException e) {
-                            failed = REMOTE_PORTS[i];
+                            if(!REMOTE_PORTS[i].equals(myPort))
+                                failed = REMOTE_PORTS[i];
                             Log.e(TAG, "Pratibha Alert ClientTask socket IOException");
                         } /*catch(InterruptedException e)
                         {
@@ -561,5 +577,14 @@ public class GroupMessengerActivity extends Activity {
         uriBuilder.authority(authority);
         uriBuilder.scheme(scheme);
         return uriBuilder.build();
+    }
+
+    protected void onProgressUpdate(String...strings) {
+        /*
+             * The following code displays what is received in doInBackground().
+             */
+        String strReceived = strings[0].trim();
+        TextView remoteTextView = (TextView) findViewById(R.id.textView1);
+        remoteTextView.append(strReceived + "\t\n");
     }
 }

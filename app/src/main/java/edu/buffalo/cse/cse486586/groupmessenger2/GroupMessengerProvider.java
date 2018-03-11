@@ -62,6 +62,11 @@ public class GroupMessengerProvider extends ContentProvider {
          * take a look at the code for PA1.
          */
 
+        /*
+        Referred:
+        1. https://developer.android.com/reference/android/database/sqlite/SQLiteDatabase.html
+         */
+
         //   Log.v("db", "About to get writable database");
         SQLiteDatabase sqlDB = myDB.getWritableDatabase();
         //   Log.v("db", "got writable database");
@@ -104,6 +109,11 @@ public class GroupMessengerProvider extends ContentProvider {
          * If you use a file storage option, then it is your job to build a Cursor * object. I
          * recommend building a MatrixCursor described at:
          * http://developer.android.com/reference/android/database/MatrixCursor.html
+         */
+
+        /*
+        Referred:
+        1. https://developer.android.com/reference/android/database/sqlite/SQLiteQueryBuilder.html
          */
 
         SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
